@@ -12,7 +12,7 @@ export const normalizeColor = value => typeof value === 'string' && /^#[\da-f]{6
 export const requirementColor = (requirement, index, theme) => normalizeColor(requirement.color) || PALETTES.find(p => p.id === normalizeTheme(theme)).colors[index % 7];
 const normalizeNote = (notes, id) => ({
   id,
-  title: typeof notes?.title === 'string' ? notes.title.slice(0, 80) : 'Notes',
+  title: typeof notes?.title === 'string' ? notes.title : 'Notes',
   text: typeof notes === 'string' ? notes : typeof notes?.text === 'string' ? notes.text : '',
   color: normalizeColor(notes?.color) || '#a5b4fc',
   size: ['small', 'medium', 'large'].includes(notes?.size) ? notes.size : 'medium',

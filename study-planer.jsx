@@ -1,3 +1,9 @@
+import DegreeSwitcher from './components/DegreeSwitcher';
+import MultiDegreeOverview from './components/MultiDegreeOverview';
+import PlannerDialog from './components/PlannerDialog';
+import { downloadJSON } from './hooks/usePlanner';
+import { loadWorkspace } from './planner-storage.mjs';
+import { KEY_PREFIX } from './planner-config.mjs';
 import usePlanner from './hooks/usePlanner';
 import useCloudSync from './hooks/useCloudSync';
 import DegreeProgress from './components/DegreeProgress';
@@ -7,7 +13,7 @@ import ContainerAnalytics from './components/requirements/ContainerAnalytics';
 import AddSemesterCard from './components/semesters/AddSemesterCard';
 import InlineEditable from './components/InlineEditable';
 import SemesterColumn from './components/semesters/SemesterColumn';
-import { DEFAULT_SEMESTERS, moveModuleToPosition, moveRequirementToPosition, resequenceModules, sortModulesForDisplay, isValidCredits, parseNumberInput } from './planner-model.mjs';
+import { moveModuleToPosition, moveRequirementToPosition, resequenceModules, sortModulesForDisplay, isValidRequirementCredits, parseNumberInput } from './planner-model.mjs';
 import { IS_DEMO } from './planner-config.mjs';
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { BookOpen, GraduationCap, Cloud, LogOut } from 'lucide-react';
@@ -26,8 +32,9 @@ const createGoogleNonce = async () => {
   return { nonce, hashedNonce };
 };
 
-export default function StudyPlaner() {
-  const planner = usePlanner();
+export default function StudyPlaner({ plannerOptions } = {}) {
+  const [session, setSession] = useState(null);
+  const planner = usePlanner(session?.user?.id ?? null, plannerOptions);
   const {
     theme,
     setTheme,
@@ -63,11 +70,25 @@ export default function StudyPlaner() {
   const [dropTarget, setDropTarget] = useState(null);
   const [draggedRequirementId, setDraggedRequirementId] = useState(null);
   const [requirementDropTarget, setRequirementDropTarget] = useState(null);
-  const [session, setSession] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authFeedback, setAuthFeedback] = useState(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const { isSyncing, syncError, lastSavedAt, reloadCloud } = useCloudSync({ client: supabase, owner: session?.user?.id ?? null, enabled: !IS_DEMO, planner });
+  const { isSyncing, syncError, lastSavedAt, reloadCloud, cloudChoice, chooseCloud, chooseLocal } = useCloudSync({ client: supabase, owner: session?.user?.id ?? null, enabled: !IS_DEMO && isAuthReady, planner });
+  const [showOverview, setShowOverview] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const moduleFormRef = useRef(null);
+  const afterSaveRef = useRef(null);
+  const runNavigation = action => {
+    if (isFormOpen) { setPendingNavigation(() => action); return; }
+    action();
+  };
+  const selectDegree = id => runNavigation(() => { if (planner.selectDegree(id)) setShowOverview(false); });
+  useEffect(() => {
+    setIsFormOpen(false); setPendingNavigation(null); afterSaveRef.current = null;
+    setDraggedModuleId(null); setDropTarget(null); setDraggedRequirementId(null); setRequirementDropTarget(null);
+    previousModulePositionsRef.current = new Map(); previousRequirementPositionsRef.current = new Map();
+  }, [planner.viewKey]);
+  useEffect(() => { setShowOverview(false); }, [planner.scope]);
   const fileInputRef = useRef(null);
   const googleButtonRef = useRef(null);
   const googleNonceRef = useRef(null);
@@ -169,7 +190,7 @@ export default function StudyPlaner() {
 
   }, [requirements]);
 
-  const highestRemovableSemester = semesters.length > DEFAULT_SEMESTERS.length ? semesters[semesters.length - 1] : null;
+  const highestRemovableSemester = semesters.length > 1 ? semesters[semesters.length - 1] : null;
 
   const closeModal = () => {
     setIsFormOpen(false);
@@ -177,8 +198,11 @@ export default function StudyPlaner() {
   };
 
   const addModule = (newModule) => {
-    addPlannerModule(newModule);
-    closeModal();
+    if (addPlannerModule(newModule)) {
+      closeModal();
+      const next = afterSaveRef.current; afterSaveRef.current = null;
+      setPendingNavigation(null); next?.();
+    }
   };
 
   const openAddModuleModal = (semester) => {
@@ -365,6 +389,8 @@ export default function StudyPlaner() {
     setRequirementDropTarget(null);
   };
 
+  if (planner.blocked) return <div className="study-planer-layout"><h1>Lokale Daten bleiben geschützt</h1><p role="alert">{planner.storageError}</p><button className="secondary-btn" onClick={planner.exportRecovery}>Originaldaten exportieren</button><p>Bitte die gesicherte Datei prüfen. Es wurden keine Standarddaten über den beschädigten Plan geschrieben.</p><label>Gültiges Plan-Backup wiederherstellen<input type="file" accept="application/json" onChange={planner.recoverFromFile} /></label></div>;
+
   return (
     <div className="study-planer-layout">
       <header className="app-header">
@@ -392,6 +418,16 @@ export default function StudyPlaner() {
         </div>
       </header>
 
+      <DegreeSwitcher key={`switcher:${planner.viewKey}`} planner={planner} onSelect={selectDegree} onOverview={() => runNavigation(() => setShowOverview(value => !value))} onAction={runNavigation} />
+      {planner.storageError && <p role="alert" className="planner-warning">{planner.storageError}</p>}
+      <div className="recovery-actions"><button className="recovery-link" onClick={planner.restoreRecovery}>Letzten Sicherungspunkt wiederherstellen</button>{session && <button className="recovery-link" onClick={() => {
+        try {
+          const guest = loadWorkspace(localStorage, KEY_PREFIX, null, theme);
+          downloadJSON(guest.document, 'study-planner-guest-backup.json');
+          window.alert('Gastplan heruntergeladen. Über Import JSON kannst du ihn nach Prüfung ausdrücklich als vollständigen Kontoplan wiederherstellen.');
+        } catch (error) { window.alert(error.message); }
+      }}>Gastplan als Backup herunterladen</button>}</div>
+      {cloudChoice && <section className="cloud-choice" aria-label="Cloud-Konflikt"><h2>Lokaler Stand und Cloud abgleichen</h2><p>Dein lokaler Stand enthält {cloudChoice.local.degrees.length} Studiengänge. {cloudChoice.remote ? `Die Cloud enthält ${cloudChoice.remote.degrees.length} Studiengänge.` : 'Für dieses Konto existiert noch kein Cloud-Plan.'} Automatisches Speichern ist bis zur Auswahl pausiert.</p><div className="degree-navigation-actions"><button className="secondary-btn" onClick={handleExport}>Lokal exportieren</button>{cloudChoice.remote && <><button className="secondary-btn" onClick={() => downloadJSON(cloudChoice.remote, 'study-planner-cloud-backup.json')}>Cloud exportieren</button><button className="secondary-btn" onClick={chooseCloud}>Cloud verwenden</button></>}<button className="secondary-btn" onClick={chooseLocal}>Lokalen Stand in Cloud übernehmen</button></div></section>}
       {isAppearanceOpen && <AppearancePanel theme={theme} onThemeChange={setTheme} />}
       {(!supabase || IS_DEMO) ? <div className="local-banner"><span className="local-dot" />{IS_DEMO ? 'Local preview · Sample data · Changes stay in this browser' : 'Local planner · Automatically saved in this browser'}</div> : <section className={`cloud-panel ${session ? 'is-connected' : ''}`}>
         {!isAuthReady ? (
@@ -409,8 +445,8 @@ export default function StudyPlaner() {
             <div className="cloud-panel-heading">
               <div className="cloud-icon"><Cloud size={22} /></div>
               <div>
-                <span className="cloud-eyebrow">Cloud-Sicherung aktiv</span>
-                <h2>Dein Plan wird automatisch gespeichert</h2>
+                <span className="cloud-eyebrow">{syncError || cloudChoice ? 'Cloud-Sicherung pausiert' : 'Cloud-Sicherung aktiv'}</span>
+                <h2>{syncError || cloudChoice ? 'Bitte den Cloud-Stand prüfen' : 'Dein Plan wird automatisch gespeichert'}</h2>
               </div>
             </div>
             <div className="cloud-account">
@@ -458,10 +494,20 @@ export default function StudyPlaner() {
         )}
       </section>}
 
-      <DegreeProgress modules={orderedModules} requirements={requirements} />
+      {showOverview ? <MultiDegreeOverview degrees={planner.degrees} onOpen={selectDegree} /> : <DegreeProgress modules={orderedModules} requirements={requirements} />}
 
+      {pendingNavigation && <PlannerDialog title="Offene Modulbearbeitung" onClose={() => { setPendingNavigation(null); afterSaveRef.current = null; }}><p>Vor dem Wechsel speichern oder den Entwurf verwerfen?</p><div className="modal-actions"><button className="btn-cancel" onClick={() => setPendingNavigation(null)}>Abbrechen</button><button className="secondary-btn" onClick={() => { const next = pendingNavigation; setPendingNavigation(null); closeModal(); next(); }}>Verwerfen und wechseln</button><button className="btn-submit" onClick={() => { const form = moduleFormRef.current;
+        const valid = form?.checkValidity();
+        afterSaveRef.current = valid ? pendingNavigation : null;
+        setPendingNavigation(null);
+        requestAnimationFrame(() => valid ? form.requestSubmit() : form?.reportValidity()); }}>Speichern und wechseln</button></div></PlannerDialog>}
       {isFormOpen && (
         <ModuleModal
+          key={`module-modal:${planner.viewKey}`}
+          formRef={moduleFormRef}
+          degrees={planner.degrees}
+          activeDegreeId={planner.activeDegreeId}
+          onSwitchDegree={selectDegree}
           onClose={closeModal}
           onAdd={addModule}
           allSemesters={semesters}
@@ -470,7 +516,7 @@ export default function StudyPlaner() {
         />
       )}
 
-      <main className="main-content">
+      {!showOverview && <main key={`planner:${planner.viewKey}`} className="main-content">
         <section className="timeline-section">
           <h2><BookOpen size={24} /> Semester Timeline</h2>
           <div className="timeline-grid">
@@ -539,8 +585,8 @@ export default function StudyPlaner() {
                 )));
               }}
               onUpdateCredits={(newCredits) => {
-                if (!isValidCredits(newCredits)) {
-                  window.alert('Please enter valid required ECTS between 0.5 and 30.');
+                if (!isValidRequirementCredits(newCredits)) {
+                  window.alert('Please enter positive required ECTS (e.g. 60, 120 or 180).');
                   return;
                 }
                 setRequirements((currentRequirements) => currentRequirements.map((currentRequirement) => (
@@ -603,7 +649,7 @@ export default function StudyPlaner() {
             + Add Requirement
           </button>
         </aside>
-      </main>
+      </main>}
     </div>
   );
 }

@@ -1,21 +1,13 @@
 import React from 'react';
+import { viewStats } from '../multi-degree.mjs';
 
 export default function DegreeProgress({ modules, requirements }) {
-  const includedRequirements = requirements.filter(req => req.countTowardsTotal !== false);
-  const includedContainers = new Set(includedRequirements.map(req => req.title));
-  const includedModules = modules.filter(module => includedContainers.has(module.container));
-
-  const totalRequiredCredits = includedRequirements.reduce((sum, requirement) => sum + requirement.requiredCredits, 0);
-  const totalEarnedCredits = includedModules.filter((module) => module.status === 'Completed').reduce((sum, module) => sum + module.credits, 0);
-  const totalInProgressCredits = includedModules.filter((module) => module.status === 'In Progress').reduce((sum, module) => sum + module.credits, 0);
-  const totalPlannedCredits = includedModules.filter((module) => module.status === 'Planned').reduce((sum, module) => sum + module.credits, 0);
+  const stats = viewStats(modules, requirements);
+  const { required: totalRequiredCredits, completed: totalEarnedCredits, inProgress: totalInProgressCredits, planned: totalPlannedCredits } = stats;
+  const averageGrade = stats.average == null ? null : stats.average.toFixed(2);
   const totalEarnedPercentage = totalRequiredCredits > 0 ? Math.min((totalEarnedCredits / totalRequiredCredits) * 100, 100) : 0;
   const totalInProgressPercentage = totalRequiredCredits > 0 ? Math.min((totalInProgressCredits / totalRequiredCredits) * 100, 100 - totalEarnedPercentage) : 0;
   const totalPlannedPercentage = totalRequiredCredits > 0 ? Math.min((totalPlannedCredits / totalRequiredCredits) * 100, 100 - totalEarnedPercentage - totalInProgressPercentage) : 0;
-  const gradedCompletedModules = includedModules.filter((module) => module.status === 'Completed' && typeof module.grade === 'number' && !Number.isNaN(module.grade));
-  const weightedGradeSum = gradedCompletedModules.reduce((sum, module) => sum + (module.grade * module.credits), 0);
-  const gradedCredits = gradedCompletedModules.reduce((sum, module) => sum + module.credits, 0);
-  const averageGrade = gradedCredits > 0 ? (weightedGradeSum / gradedCredits).toFixed(2) : null;
 
   return (
 <div className="overall-progress-section">

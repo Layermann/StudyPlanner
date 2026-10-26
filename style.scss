@@ -96,7 +96,9 @@ button {
     flex-wrap: wrap;
   }
 
-  .secondary-btn {
+}
+
+.secondary-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -114,7 +116,6 @@ button {
       transform: translateY(-2px);
       box-shadow: var(--shadow-glow);
     }
-  }
 }
 
 .hidden-file-input {
@@ -1055,7 +1056,7 @@ button {
   animation: fadeIn 0.2s ease-out;
 }
 
-.modal-content {
+.modal-content, .planner-dialog {
   background: var(--bg-color);
   border: 1px solid var(--surface-border);
   border-radius: var(--radius-lg);
@@ -1269,3 +1270,32 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Keep the viewport width stable when expanding notes introduces a scrollbar. */
 html { scrollbar-gutter: stable; }
+.degree-navigation { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem; margin: -1rem 0 1.5rem; }
+.degree-select-label { display: grid; gap: .4rem; color: var(--text-muted); font-size: .8rem; min-width: 0; flex: 1 1 20rem; max-width: 40rem; }
+.degree-navigation select, .planner-dialog input, .planner-dialog select, .modal-content > label select { width: 100%; min-width: 0; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); background: var(--surface-color); color: var(--text-main); padding: .7rem; font: inherit; }
+.degree-navigation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.planner-dialog { background: var(--surface-color); color: var(--text-main); border: 1px solid var(--surface-border); border-radius: var(--radius-lg); width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; padding: 1.5rem; box-shadow: 0 20px 80px #0008; }
+.planner-dialog::backdrop { background: #0009; }
+.degree-dialog-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.degree-dialog-heading h2 { margin: 0; font-size: 1.25rem; overflow-wrap: anywhere; }
+.planner-dialog form { display: grid; gap: 1rem; }
+.planner-dialog label { display: grid; gap: .4rem; font-size: .9rem; }
+.degree-danger { border-top: 1px solid var(--surface-border); margin-top: 1.5rem; padding-top: 1rem; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.degree-overview { margin: 1.5rem 0; }
+.degree-summary { display: flex; flex-wrap: wrap; gap: 1rem 2rem; padding: 1rem 1.25rem; background: var(--surface-color); border: 1px solid var(--surface-border); border-radius: var(--radius-md); }
+.degree-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr)); gap: 1.25rem; }
+.degree-overview-card { padding: 1.25rem; border: 1px solid var(--surface-border); background: var(--surface-color); border-radius: var(--radius-lg); min-width: 0; }
+.degree-overview-card h3 { overflow-wrap: anywhere; }
+.degree-overview-card .overall-progress-section { padding: 0; border: 0; box-shadow: none; margin-bottom: 1rem; }
+.degree-overview-card .credit-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.planner-warning, .cloud-choice { border: 1px solid var(--warning); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1rem; overflow-wrap: anywhere; }
+.recovery-actions { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+.recovery-link { padding: 0; color: var(--text-muted); background: none; text-decoration: underline; font-size: .75rem; }
+@media (max-width: 600px) { .degree-navigation, .degree-navigation-actions { width: 100%; } .degree-navigation-actions > button { flex: 1; } .planner-dialog .modal-actions { flex-wrap: wrap; } .app-header .logo { min-width: 0; } .app-header h1 { overflow-wrap: anywhere; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+.planner-dialog .form-group-row { display: flex; flex-wrap: wrap; gap: 1rem; }
+.planner-dialog .form-group-row > .form-group { flex: 1 1 10rem; min-width: 0; }
+.planner-dialog .form-group { display: grid; gap: .4rem; }
+.planner-dialog .form-group + .form-group-row { margin-top: .5rem; }

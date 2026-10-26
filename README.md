@@ -62,3 +62,20 @@ A push to `main` starts `.github/workflows/deploy-pages.yml`: install dependenci
 run tests, build, then deploy the generated `dist` artifact to GitHub Pages.
 The workflow receives its public browser configuration from repository secrets.
 Local builds without that configuration run in local-only mode.
+
+## Multi-degree version 4 (local implementation)
+
+Plans now store all degrees in one versioned JSON document. See
+`MULTI-DEGREE-IMPLEMENTATION.md` for the data model, local migration, account
+isolation, backup recovery, validation evidence and manual review steps.
+
+In development, these additional pages use isolated in-memory data:
+
+- `/tests/browser/multi-degree.html`: planner/cloud hook integration checks.
+- `/tests/browser/multi-degree-ui.html`: sequential UI flows at 390, 768 and 1280 px.
+
+**Production release gate:** `supabase/multi-degree-guard.sql` has been installed
+and tested in the separate StudyPlanner Test project. The guard and RLS/revision
+tests passed there. Review and install the guard separately in production before
+rollout; the app/deployment workflow does not install it. Real Google sign-in and
+end-to-end cross-device tests remain pending. See `supabase/TEST-PROJECT.md`.

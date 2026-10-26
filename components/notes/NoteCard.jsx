@@ -2,7 +2,7 @@ import React from 'react';
 import { Trash2 } from 'lucide-react';
 
 export default function NoteCard({ note, index, moduleId, moduleName, onUpdate, onDelete }) {
-  const bodyId = `notes-${moduleId}-${note.id}`;
+  const bodyId = `notes-${encodeURIComponent(moduleId)}-${encodeURIComponent(note.id)}`;
   const label = `Note ${index + 1}`;
 
   return (

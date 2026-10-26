@@ -8,7 +8,7 @@ export const groupBy = (array, keyFn) => {
     }
     result[key].push(item);
     return result;
-  }, {});
+  }, Object.create(null));
 };
 
 export const DEFAULT_SEMESTERS = ['Semester 1', 'Semester 2', 'Semester 3', 'Semester 4'];
@@ -36,7 +36,7 @@ export const DEFAULT_CREDITS_BY_CONTAINER = {
 
 export const defaultContainerTitles = DEFAULT_REQUIREMENTS.map((requirement) => requirement.title);
 
-export const getDefaultCreditsForContainer = (container) => DEFAULT_CREDITS_BY_CONTAINER[container] ?? 6;
+export const getDefaultCreditsForContainer = (container) => Object.hasOwn(DEFAULT_CREDITS_BY_CONTAINER, container) ? DEFAULT_CREDITS_BY_CONTAINER[container] : 6;
 
 export const normalizeSemesterList = (semesterList) => {
   if (!Array.isArray(semesterList) || semesterList.length === 0) {
@@ -59,6 +59,9 @@ export const isValidCredits = (value) => {
   const parsed = parseNumberInput(normalized);
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 30;
 };
+
+// Requirements may describe an entire degree, unlike individual modules.
+export const isValidRequirementCredits = value => String(value).trim() !== '' && Number.isFinite(parseNumberInput(value)) && parseNumberInput(value) > 0;
 
 export const normalizeGradeValue = (value) => {
   const normalizedValue = String(value).replace(',', '.').trim();
@@ -90,7 +93,7 @@ export const normalizeRequirements = (savedRequirements) => {
     .map((requirement, index) => ({
       id: requirement.id ? String(requirement.id) : `req-${Date.now()}-${index}`,
       title: requirement.title.trim(),
-      requiredCredits: isValidCredits(requirement.requiredCredits) ? parseNumberInput(requirement.requiredCredits) : 6,
+      requiredCredits: isValidRequirementCredits(requirement.requiredCredits) ? parseNumberInput(requirement.requiredCredits) : 6,
       countTowardsTotal: requirement.countTowardsTotal !== false,
       color: normalizeColor(requirement.color),
     }));
@@ -112,7 +115,7 @@ export const sortModulesForDisplay = (modules, semesters) => {
 };
 
 export const resequenceModules = (modules) => {
-  const semesterOrderCounters = {};
+  const semesterOrderCounters = Object.create(null);
 
   return modules.map((module) => {
     const nextOrder = semesterOrderCounters[module.semester] ?? 0;
@@ -162,7 +165,7 @@ export const moveModuleToPosition = (modules, semesters, draggedModuleId, target
       return true;
     });
     return result;
-  }, {});
+  }, Object.create(null));
 
   if (!draggedModule) {
     return modules;

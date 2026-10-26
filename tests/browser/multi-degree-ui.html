@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multi-degree UI checks</title></head>
+<body>
+<h1>Responsive Multi-degree UI checks</h1>
+<p id="summary">Running sequentially; every frame uses isolated in-memory data with cloud disabled.</p>
+<div id="frames"></div>
+<script type="module">
+  const results=[];
+  for (const width of [390,768,1280]) {
+    const heading=document.createElement('h2'); heading.textContent=width+' px';
+    const frame=document.createElement('iframe'); frame.title=width+' px UI test'; frame.width=width; frame.height=1100;
+    const completion=new Promise(resolve=>{
+      const receive=event=>{if(event.source===frame.contentWindow&&event.data?.type==='ui-test-result'){window.removeEventListener('message',receive);resolve(event.data.result);}};
+      window.addEventListener('message',receive);
+    });
+    frame.src='./multi-degree-preview.html?demo=1';
+    document.getElementById('frames').append(heading,frame);
+    results.push(await completion);
+  }
+  document.getElementById('summary').textContent=results.join('\n');
+</script>
+</body></html>

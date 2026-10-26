@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import PlannerDialog from '../PlannerDialog';
 import { getDefaultCreditsForContainer, STATUSES, VALID_GRADES, isValidCredits, isValidGrade, parseNumberInput } from '../../planner-model.mjs';
 
-export default function ModuleModal({ onClose, onAdd, allSemesters, containers, initialSemester }) {
+export default function ModuleModal({ onClose, onAdd, allSemesters, containers, initialSemester, formRef, degrees = [], activeDegreeId, onSwitchDegree }) {
   const [name, setName] = useState('');
   const [credits, setCredits] = useState(String(getDefaultCreditsForContainer(containers[0])));
   const [semester, setSemester] = useState(initialSemester || allSemesters[0]);
@@ -42,19 +43,19 @@ export default function ModuleModal({ onClose, onAdd, allSemesters, containers, 
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <h2>Add New Module</h2>
-        <form onSubmit={handleSubmit}>
+    <PlannerDialog title="Add New Module" onClose={onClose}>
+      <div className="module-form-content">
+        {degrees.length > 1 && <label>Studiengang wechseln<select aria-label="Studiengang im Modulformular" value={activeDegreeId} onChange={event => onSwitchDegree(event.target.value)}>{degrees.map(degree => <option key={degree.id} value={degree.id}>{degree.title}</option>)}</select></label>}
+        <form ref={formRef} onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Module Name</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} autoFocus required placeholder="e.g. Data Structures" />
+            <label htmlFor="module-name">Module Name</label>
+            <input id="module-name" type="text" value={name} onChange={e => setName(e.target.value)} autoFocus required placeholder="e.g. Data Structures" />
           </div>
           <div className="form-group-row">
             <div className="form-group">
-              <label>Credits (ECTS)</label>
+              <label htmlFor="module-credits">Credits (ECTS)</label>
               <input
-                type="text"
+                id="module-credits" type="text"
                 inputMode="decimal"
                 value={credits}
                 onChange={e => {
@@ -64,17 +65,17 @@ export default function ModuleModal({ onClose, onAdd, allSemesters, containers, 
               />
             </div>
             <div className="form-group">
-              <label>Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value)}>
+              <label htmlFor="module-status">Status</label>
+              <select id="module-status" value={status} onChange={e => setStatus(e.target.value)}>
                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
           {status === 'Completed' && (
             <div className="form-group">
-              <label>Grade</label>
+              <label htmlFor="module-grade">Grade</label>
               <input
-                type="text"
+                id="module-grade" type="text"
                 inputMode="decimal"
                 value={grade}
                 onChange={e => setGrade(e.target.value)}
@@ -85,14 +86,14 @@ export default function ModuleModal({ onClose, onAdd, allSemesters, containers, 
           )}
           <div className="form-group-row">
             <div className="form-group">
-              <label>Semester</label>
-              <select value={semester} onChange={e => setSemester(e.target.value)}>
+              <label htmlFor="module-semester">Semester</label>
+              <select id="module-semester" value={semester} onChange={e => setSemester(e.target.value)}>
                 {allSemesters.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label>Container</label>
-              <select value={container} onChange={e => handleContainerChange(e.target.value)}>
+              <label htmlFor="module-container">Container</label>
+              <select id="module-container" value={container} onChange={e => handleContainerChange(e.target.value)}>
                 {containers.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -104,6 +105,6 @@ export default function ModuleModal({ onClose, onAdd, allSemesters, containers, 
           </div>
         </form>
       </div>
-    </div>
+    </PlannerDialog>
   );
 }
