@@ -635,7 +635,6 @@ button {
   
   &:hover {
     border-color: rgba(129, 140, 248, 0.4);
-    transform: translateY(-2px);
     box-shadow: var(--shadow-glow);
   }
 
@@ -1173,3 +1172,100 @@ button {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Planner palettes and personalisation */
+:root[data-palette='graphite'] {
+  --bg-color: #151618; --surface-color: #202226; --surface-border: #34373d;
+  --text-main: #eceef1; --text-muted: #a1a6b0; --primary: #bcc4d3; --primary-hover: #9da9bf;
+  --accent: #b6adb9; --planned: #8ba4c1; --success: #8eb5a5; --warning: #c8b48a;
+  --shadow-glow: 0 6px 24px #00000020;
+}
+:root[data-palette='ocean'] {
+  --bg-color: #0e1720; --surface-color: #17232e; --surface-border: #2b3c4b;
+  --text-main: #e6edf3; --text-muted: #9bafbf; --primary: #92b4d2; --primary-hover: #749abf;
+  --accent: #83b9c2; --planned: #83a9ce; --success: #81b1a5; --warning: #c4b28e;
+  --shadow-glow: 0 6px 24px #00000020;
+}
+:root[data-palette='porcelain'] {
+  color-scheme: light;
+  --bg-color: #f3f5f7; --surface-color: #ffffff; --surface-border: #dce1e7;
+  --text-main: #263345; --text-muted: #667386; --primary: #526583; --primary-hover: #3e516e;
+  --accent: #746780; --planned: #597899; --success: #507f6b; --warning: #927847;
+  --shadow-glow: 0 6px 24px #2633450a;
+}
+:root:not([data-palette='porcelain']) { color-scheme: dark; }
+body { background-image: radial-gradient(ellipse at 10% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 50%); }
+.app-header .logo h1 { background: none; -webkit-text-fill-color: var(--text-main); color: var(--text-main); font-size: clamp(1.4rem, 2.4vw, 2.2rem); }
+.app-header .logo { min-width: 0; }
+.app-header .header-actions { flex-shrink: 0; }
+.app-header { margin-bottom: 1.5rem; }
+.semester-col, .module-card.status-completed, .analytics-card.is-excluded { background: color-mix(in srgb, var(--surface-color) 70%, var(--bg-color)); }
+.add-semester-card { background: color-mix(in srgb, var(--surface-color) 40%, var(--bg-color)); }
+.module-card .module-meta .tag-grade { color: var(--planned); background: color-mix(in srgb, var(--planned) 12%, transparent); }
+.module-card .module-meta .tag-grade.empty { color: var(--planned); }
+.overall-progress-section .progress-bar-large, .analytics-card .progress-bar { background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
+.local-banner { display: flex; align-items: center; gap: .6rem; color: var(--text-muted); font-size: .8rem; margin: 0 0 1.5rem; }
+.local-dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; flex-shrink: 0; }
+.appearance-panel { padding: 1.25rem; border: 1px solid var(--surface-border); background: var(--surface-color); border-radius: var(--radius-md); margin-bottom: 1.25rem; }
+.appearance-panel h2 { font-size: 1rem; margin: 0; }
+.appearance-panel p { font-size: .85rem; color: var(--text-muted); margin: .5rem 0 1rem; }
+.palette-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.palette-option { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; border: 1px solid var(--surface-border); background: var(--bg-color); color: var(--text-main); padding: .75rem; border-radius: 10px; text-align: left; }
+.palette-option.selected { outline: 2px solid var(--primary); outline-offset: 2px; }
+.palette-preview { display: flex; gap: .3rem; padding: .5rem; border-radius: 5px; }
+.palette-preview i { width: 13px; height: 13px; border-radius: 50%; }
+.palette-option svg { margin-left: auto; color: var(--primary); }
+.credit-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.credit-stat { border-left: 3px solid var(--surface-border); padding-left: 1rem; }
+.credit-stat > span { display: block; font-size: .8rem; color: var(--text-muted); }
+.credit-stat strong { display: flex; align-items: baseline; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; font-size: 1.8rem; font-weight: 700; }
+.credit-stat small { color: var(--text-muted); font-size: .75rem; font-weight: 500; }
+.credit-stat.planned { border-color: var(--planned); }
+.credit-stat.in-progress { border-color: var(--warning); }
+.credit-stat.completed { border-color: var(--success); }
+.credit-stat.total { border-color: var(--primary); }
+.credit-summary-hint { font-size: .75rem; color: var(--text-muted); margin: 1rem 0 0; }
+.requirement-color-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: .8rem; gap: .5rem; }
+.color-control { display: flex; align-items: center; gap: .45rem; font-size: .7rem; color: var(--text-muted); }
+input[type='color'] { width: 24px; height: 24px; padding: 2px; border: 1px solid var(--surface-border); border-radius: 6px; background: transparent; cursor: pointer; flex-shrink: 0; }
+.text-button { background: transparent; color: var(--text-muted); text-decoration: underline; font-size: .7rem; }
+.analytics-card { padding: 1.1rem; }
+.analytics-card .ac-header { flex-wrap: wrap; }
+.analytics-card .requirement-header-actions { flex-wrap: wrap; }
+.analytics-card .ac-legend { flex-wrap: wrap; gap: .5rem .8rem; }
+.module-notes { margin-top: .8rem; border-top: 1px solid var(--surface-border); cursor: default; }
+.notes-toggle { width: 100%; background: transparent; color: var(--text-muted); display: flex; align-items: center; gap: .4rem; text-align: left; padding: .75rem 0 .1rem; }
+.notes-toggle > span:nth-child(2) { color: var(--text-main); overflow-wrap: anywhere; }
+.notes-toggle small { margin-left: auto; font-size: .65rem; white-space: nowrap; }
+.notes-body { border-left: 3px solid var(--note-color); padding-left: .65rem; margin-top: .75rem; }
+.notes-tools { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .5rem; }
+.notes-title { min-width: 70px; width: 100%; flex: 1 1 90px; }
+.notes-tools input:not([type='color']), .notes-tools select, .notes-body textarea { background: var(--bg-color); color: var(--text-main); border: 1px solid var(--surface-border); border-radius: 5px; padding: .35rem; font-family: inherit; font-size: .75rem; }
+.notes-body textarea { width: 100%; display: block; resize: vertical; min-height: 95px; max-height: 500px; line-height: 1.65; padding: .5rem; }
+.notes-body textarea.note-size-small { font-size: .75rem; }
+.notes-body textarea.note-size-medium { font-size: .85rem; }
+.notes-body textarea.note-size-large { font-size: 1rem; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 700px) {
+  .credit-summary, .palette-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .study-planer-layout { padding: 1rem; }
+  .timeline-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-header .header-actions { width: 100%; }
+  .overall-progress-section { padding: 1rem; }
+  .credit-stat strong { font-size: 1.5rem; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+.notes-list-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .7rem 0; color: var(--text-muted); font-size: .75rem; }
+.notes-list-heading small { display: inline-block; min-width: 17px; text-align: center; margin-left: .2rem; padding: .1rem .25rem; border-radius: 4px; background: var(--bg-color); }
+.add-note-btn { background: transparent; border: 1px solid var(--surface-border); color: var(--text-main); border-radius: 5px; padding: .3rem .5rem; font-size: .7rem; }
+.add-note-btn:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.note-item { border: 1px solid var(--surface-border); border-left: 2px solid var(--note-color); border-radius: 6px; margin-bottom: .5rem; overflow: hidden; }
+.note-item .notes-toggle { padding: .6rem; font-size: .75rem; }
+.note-item .notes-body { border: 0; margin: 0; padding: 0 .5rem .5rem; }
+.remove-note-btn { display: flex; align-items: center; gap: .3rem; margin-top: .5rem; padding: .2rem 0; color: var(--text-muted); background: transparent; font-size: .65rem; }
+.remove-note-btn:hover { color: var(--danger); }
+:root[data-palette='porcelain'] .overall-progress-section { box-shadow: 0 4px 20px #26334508; }
+
+/* Keep the viewport width stable when expanding notes introduces a scrollbar. */
+html { scrollbar-gutter: stable; }

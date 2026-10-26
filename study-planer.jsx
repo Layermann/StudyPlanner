@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef, useLayoutEffect } from 'react';
 import { Trash2, CheckCircle2, BookOpen, GraduationCap, Eye, EyeOff, Cloud, LogOut } from 'lucide-react';
 import { supabase } from './supabaseClient';
+import { createPlanSync } from './plan-sync.mjs';
+import { PALETTES, normalizeTheme, normalizeColor, normalizeNotes, requirementColor, contrastInk } from './planner-preferences.mjs';
 
 const groupBy = (array, keyFn) => {
   return array.reduce((result, item) => {
@@ -13,10 +15,13 @@ const groupBy = (array, keyFn) => {
   }, {});
 };
 
-const STORAGE_KEY = 'studyPlannerModulesMScInformatik';
-const SEMESTER_STORAGE_KEY = 'studyPlannerSemestersMScInformatik';
-const TITLE_STORAGE_KEY = 'studyPlannerTitleMScInformatik';
-const REQUIREMENTS_STORAGE_KEY = 'studyPlannerRequirementsMScInformatik';
+const IS_DEMO = import.meta.env.DEV && new URLSearchParams(location.search).has('demo');
+const KEY_PREFIX = IS_DEMO ? 'demo:' : '';
+const THEME_STORAGE_KEY = KEY_PREFIX + 'studyPlannerTheme';
+const STORAGE_KEY = KEY_PREFIX + 'studyPlannerModulesMScInformatik';
+const SEMESTER_STORAGE_KEY = KEY_PREFIX + 'studyPlannerSemestersMScInformatik';
+const TITLE_STORAGE_KEY = KEY_PREFIX + 'studyPlannerTitleMScInformatik';
+const REQUIREMENTS_STORAGE_KEY = KEY_PREFIX + 'studyPlannerRequirementsMScInformatik';
 const DEFAULT_SEMESTERS = ['Semester 1', 'Semester 2', 'Semester 3', 'Semester 4'];
 const DEFAULT_TITLE = 'Study Planner - Master of Science Informatik';
 const DEFAULT_REQUIREMENTS = [
@@ -110,6 +115,7 @@ const normalizeRequirements = (savedRequirements) => {
       title: requirement.title.trim(),
       requiredCredits: isValidCredits(requirement.requiredCredits) ? parseNumberInput(requirement.requiredCredits) : 6,
       countTowardsTotal: requirement.countTowardsTotal !== false,
+      color: normalizeColor(requirement.color),
     }));
 };
 
@@ -161,6 +167,7 @@ const normalizeModules = (savedModules, semesters, containerTitles) => {
       credits,
       grade,
       order: typeof module?.order === 'number' ? module.order : index,
+      notes: normalizeNotes(module?.notes),
     };
   }), semesters));
 };
@@ -207,7 +214,26 @@ const moveRequirementToPosition = (requirements, draggedRequirementId, targetInd
   return nextRequirements;
 };
 
+const DEMO_MODULES = [
+  ['Theoretische Informatik', 'Semester 1', 'TMG INF', 'Completed', 6, 1.7],
+  ['Machine Learning', 'Semester 1', 'MINF', 'Completed', 6, 1.3],
+  ['Advanced Algorithms', 'Semester 1', 'MINF', 'In Progress', 6, ''],
+  ['Reinforcement Learning', 'Semester 2', 'Vertiefungslinie', 'In Progress', 6, ''],
+  ['Hauptseminar: KI', 'Semester 2', 'Hauptseminar', 'Planned', 3, ''],
+  ['Distributed Systems', 'Semester 3', 'Ergaenzende Spezialisierungsmodule', 'Planned', 6, ''],
+  ['Masterarbeit', 'Semester 4', 'Masterarbeit', 'Planned', 30, ''],
+].map(([name, semester, container, status, credits, grade], i) => ({
+  id: `demo-${i}`, name, semester, container, status, credits, grade, order: i,
+  notes: normalizeNotes(i === 3 ? { title: 'Prüfung & Materialien', text: 'Übungsblatt 4 bis Freitag bearbeiten.\nLiteratur: Sutton & Barto, Kapitel 6.\nSprechstunde am Dienstag: Fragen zu Q-Learning.', color: '#a78bfa', expanded: true } : null),
+}));
+
 export default function StudyPlaner() {
+  const [theme, setTheme] = useState(() => normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY)));
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    document.documentElement.dataset.palette = theme;
+  }, [theme]);
   const [plannerTitle, setPlannerTitle] = useState(() => localStorage.getItem(TITLE_STORAGE_KEY) || DEFAULT_TITLE);
   const [requirements, setRequirements] = useState(() => {
     const saved = localStorage.getItem(REQUIREMENTS_STORAGE_KEY);
@@ -234,7 +260,7 @@ export default function StudyPlaner() {
   const [modules, setModules] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) {
-      return [];
+      return IS_DEMO ? DEMO_MODULES : [];
     }
     try {
       const nextRequirements = normalizeRequirements(JSON.parse(localStorage.getItem(REQUIREMENTS_STORAGE_KEY) || 'null'));
@@ -270,6 +296,10 @@ export default function StudyPlaner() {
   const currentSnapshotRef = useRef(null);
   const isRestoringHistoryRef = useRef(false);
   const lastCloudPayloadRef = useRef(null);
+  const cloudSyncRef = useRef(null);
+  const [cloudReload, setCloudReload] = useState(0);
+  const [readyCloudSync, setReadyCloudSync] = useState(null);
+  const cloudOwner = session?.user?.id ?? null;
 
   const containerTitles = useMemo(() => requirements.map((requirement) => requirement.title), [requirements]);
 
@@ -290,7 +320,7 @@ export default function StudyPlaner() {
   }, [requirements]);
 
   useEffect(() => {
-    const snapshot = JSON.stringify({ plannerTitle, semesters, requirements, modules });
+    const snapshot = JSON.stringify({ plannerTitle, semesters, requirements, modules, theme });
 
     if (currentSnapshotRef.current == null) {
       currentSnapshotRef.current = snapshot;
@@ -312,14 +342,22 @@ export default function StudyPlaner() {
       historyRef.current.shift();
     }
     currentSnapshotRef.current = snapshot;
-  }, [plannerTitle, semesters, requirements, modules]);
+  }, [plannerTitle, semesters, requirements, modules, theme]);
 
   const orderedModules = useMemo(() => sortModulesForDisplay(modules, semesters), [modules, semesters]);
   const modulesBySemester = useMemo(() => groupBy(orderedModules, (module) => module.semester), [orderedModules]);
   const modulesByContainer = useMemo(() => groupBy(orderedModules, (module) => module.container), [orderedModules]);
 
   useLayoutEffect(() => {
+    // Only a drag/drop supplies a before-position snapshot. Editing content must
+    // never animate against stale viewport coordinates from before a scroll.
+    const previousPositions = previousModulePositionsRef.current;
+    previousModulePositionsRef.current = new Map();
+    if (!previousPositions.size || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const moduleElements = Array.from(document.querySelectorAll('.module-card[data-module-id]'));
+    moduleElements.forEach(element => element.getAnimations().forEach(animation => {
+      if (animation.id === 'module-reorder') animation.cancel();
+    }));
     const nextPositions = new Map();
 
     moduleElements.forEach((element) => {
@@ -328,7 +366,7 @@ export default function StudyPlaner() {
 
     moduleElements.forEach((element) => {
       const moduleId = element.dataset.moduleId;
-      const previousPosition = previousModulePositionsRef.current.get(moduleId);
+      const previousPosition = previousPositions.get(moduleId);
       const nextPosition = nextPositions.get(moduleId);
 
       if (!previousPosition || !nextPosition) {
@@ -348,17 +386,26 @@ export default function StudyPlaner() {
           { transform: 'translate(0, 0)' },
         ],
         {
+          id: 'module-reorder',
           duration: 240,
           easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
         },
       );
     });
 
-    previousModulePositionsRef.current = nextPositions;
+
   }, [orderedModules]);
 
   useLayoutEffect(() => {
+    // Only a drag/drop supplies a before-position snapshot. Editing content must
+    // never animate against stale viewport coordinates from before a scroll.
+    const previousPositions = previousRequirementPositionsRef.current;
+    previousRequirementPositionsRef.current = new Map();
+    if (!previousPositions.size || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const requirementElements = Array.from(document.querySelectorAll('.analytics-card[data-requirement-id]'));
+    requirementElements.forEach(element => element.getAnimations().forEach(animation => {
+      if (animation.id === 'requirement-reorder') animation.cancel();
+    }));
     const nextPositions = new Map();
 
     requirementElements.forEach((element) => {
@@ -367,7 +414,7 @@ export default function StudyPlaner() {
 
     requirementElements.forEach((element) => {
       const requirementId = element.dataset.requirementId;
-      const previousPosition = previousRequirementPositionsRef.current.get(requirementId);
+      const previousPosition = previousPositions.get(requirementId);
       const nextPosition = nextPositions.get(requirementId);
 
       if (!previousPosition || !nextPosition) {
@@ -387,13 +434,14 @@ export default function StudyPlaner() {
           { transform: 'translate(0, 0)' },
         ],
         {
+          id: 'requirement-reorder',
           duration: 240,
           easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
         },
       );
     });
 
-    previousRequirementPositionsRef.current = nextPositions;
+
   }, [requirements]);
 
   const includedRequirements = requirements.filter(req => req.countTowardsTotal !== false);
@@ -492,6 +540,9 @@ export default function StudyPlaner() {
       return;
     }
 
+    previousModulePositionsRef.current = new Map(
+      Array.from(document.querySelectorAll('.module-card[data-module-id]'), element => [element.dataset.moduleId, element.getBoundingClientRect()]),
+    );
     setModules((currentModules) => moveModuleToPosition(currentModules, semesters, draggedModuleId, semester, index));
     setDraggedModuleId(null);
     setDropTarget(null);
@@ -551,6 +602,8 @@ export default function StudyPlaner() {
 
   const handleExport = () => {
     const payload = {
+      version: 3,
+      theme,
       exportedAt: new Date().toISOString(),
       plannerTitle,
       requirements,
@@ -577,6 +630,7 @@ export default function StudyPlaner() {
       const nextRequirements = normalizeRequirements(importedData?.requirements);
       const nextSemesters = normalizeSemesterList(importedData?.semesters);
       const nextModules = normalizeModules(importedData?.modules, nextSemesters, nextRequirements.map((requirement) => requirement.title));
+      setTheme(normalizeTheme(importedData?.theme));
       setPlannerTitle(typeof importedData?.plannerTitle === 'string' && importedData.plannerTitle.trim() ? importedData.plannerTitle.trim() : DEFAULT_TITLE);
       setRequirements(nextRequirements);
       setSemesters(nextSemesters);
@@ -596,7 +650,7 @@ export default function StudyPlaner() {
   };
 
   useEffect(() => {
-    if (!isAuthReady || session) {
+    if (!supabase || IS_DEMO || !isAuthReady || session) {
       return undefined;
     }
 
@@ -690,6 +744,7 @@ export default function StudyPlaner() {
 
   useEffect(() => {
     const onKeyDown = (event) => {
+      if (event.target.closest?.('input, textarea, select, [contenteditable=true]')) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         const previousSnapshot = historyRef.current.pop();
         if (!previousSnapshot) {
@@ -698,6 +753,7 @@ export default function StudyPlaner() {
         event.preventDefault();
         isRestoringHistoryRef.current = true;
         const parsedSnapshot = JSON.parse(previousSnapshot);
+        setTheme(normalizeTheme(parsedSnapshot.theme));
         setPlannerTitle(parsedSnapshot.plannerTitle);
         setSemesters(parsedSnapshot.semesters);
         setRequirements(parsedSnapshot.requirements);
@@ -710,6 +766,7 @@ export default function StudyPlaner() {
   }, []);
 
   useEffect(() => {
+    if (!supabase || IS_DEMO) { setIsAuthReady(true); return; }
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => {
       if (mounted) {
@@ -732,111 +789,93 @@ export default function StudyPlaner() {
   }, []);
 
   useEffect(() => {
-    if (!session) {
-      setInitialSyncDone(false);
-      setSyncError(null);
+    setInitialSyncDone(false);
+    setReadyCloudSync(null);
+    setSyncError(null);
+    setLastSavedAt(null);
+    lastCloudPayloadRef.current = null;
+    if (!cloudOwner || !supabase || IS_DEMO) {
       setIsSyncing(false);
-      setLastSavedAt(null);
-      lastCloudPayloadRef.current = null;
       return;
     }
 
+    const sync = createPlanSync(supabase, cloudOwner);
+    cloudSyncRef.current = sync;
+    const localSnapshotAtStart = currentSnapshotRef.current;
     let canceled = false;
-    setSyncError(null);
     setIsSyncing(true);
-
     (async () => {
-      const { data, error } = await supabase
-        .from('plans')
-        .select('data, updated_at')
-        .eq('owner', session.user.id)
-        .single();
-
-      if (canceled) {
-        return;
+      try {
+        const data = await sync.load();
+        if (canceled) return;
+        if (data && currentSnapshotRef.current !== localSnapshotAtStart) {
+          throw new Error('Local edits were made while loading');
+        }
+        if (data) {
+          const payload = data.data;
+          // Do not normalize a malformed/future plan into empty defaults and save it.
+          if (!Array.isArray(payload.modules) || !Array.isArray(payload.requirements) || !payload.requirements.length || !Array.isArray(payload.semesters) || !payload.semesters.length) {
+            throw new Error('Invalid cloud plan structure');
+          }
+          const nextRequirements = normalizeRequirements(payload.requirements);
+          const nextSemesters = normalizeSemesterList(payload.semesters);
+          const nextModules = normalizeModules(payload.modules, nextSemesters, nextRequirements.map(req => req.title));
+          const nextPlannerTitle = typeof payload.plannerTitle === 'string' && payload.plannerTitle.trim() ? payload.plannerTitle.trim() : DEFAULT_TITLE;
+          const nextTheme = normalizeTheme(payload.theme);
+          setTheme(nextTheme);
+          setPlannerTitle(nextPlannerTitle);
+          setRequirements(nextRequirements);
+          setSemesters(nextSemesters);
+          setModules(nextModules);
+          setLastSavedAt(data.updated_at);
+          lastCloudPayloadRef.current = JSON.stringify({ theme: nextTheme, plannerTitle: nextPlannerTitle, semesters: nextSemesters, requirements: nextRequirements, modules: nextModules });
+          // Undo must not cross the cloud-load/account boundary.
+          historyRef.current = [];
+          isRestoringHistoryRef.current = true;
+        }
+        setReadyCloudSync(sync);
+        setInitialSyncDone(true);
+      } catch (error) {
+        if (!canceled) {
+          sync.dispose();
+          setSyncError('Cloud-Plan konnte nicht sicher geladen werden. Automatisches Speichern ist pausiert; dein lokaler Stand bleibt erhalten.');
+        }
+      } finally {
+        if (!canceled) setIsSyncing(false);
       }
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Supabase load failed', error);
-        setSyncError('Synchronisation fehlgeschlagen. Aenderungen bleiben lokal erhalten.');
-      }
-
-      if (!error && data?.data) {
-        const payload = data.data;
-        const nextRequirements = normalizeRequirements(payload.requirements);
-        const nextSemesters = normalizeSemesterList(payload.semesters);
-        const nextModules = normalizeModules(
-          payload.modules ?? [],
-          nextSemesters,
-          nextRequirements.map((requirement) => requirement.title),
-        );
-        const nextPlannerTitle = typeof payload.plannerTitle === 'string' && payload.plannerTitle.trim() ? payload.plannerTitle.trim() : DEFAULT_TITLE;
-        setPlannerTitle(nextPlannerTitle);
-        setRequirements(nextRequirements);
-        setSemesters(nextSemesters);
-        setModules(nextModules);
-        setLastSavedAt(data.updated_at ?? null);
-        lastCloudPayloadRef.current = JSON.stringify({
-          plannerTitle: nextPlannerTitle,
-          semesters: nextSemesters,
-          requirements: nextRequirements,
-          modules: nextModules,
-        });
-      }
-
-      setInitialSyncDone(true);
-      setIsSyncing(false);
     })();
-
     return () => {
       canceled = true;
+      sync.dispose();
+      if (cloudSyncRef.current === sync) cloudSyncRef.current = null;
     };
-  }, [session]);
+  }, [cloudOwner, cloudReload]);
 
   useEffect(() => {
-    if (!session || !initialSyncDone) {
-      return;
-    }
-
-    const payload = {
-      plannerTitle,
-      semesters,
-      requirements,
-      modules,
-    };
+    const sync = cloudSyncRef.current;
+    if (!cloudOwner || !initialSyncDone || !sync || readyCloudSync !== sync) return;
+    const payload = { theme, plannerTitle, semesters, requirements, modules };
     const serializedPayload = JSON.stringify(payload);
-
-    if (serializedPayload === lastCloudPayloadRef.current) {
-      return;
-    }
-
+    if (serializedPayload === lastCloudPayloadRef.current) return;
     const timeoutId = setTimeout(async () => {
       setIsSyncing(true);
-      setSyncError(null);
-      const { data, error } = await supabase
-        .from('plans')
-        .upsert({
-          owner: session.user.id,
-          data: payload,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'owner' })
-        .select('updated_at')
-        .single();
-
-      setIsSyncing(false);
-      if (error) {
-        console.error('Supabase save failed', error);
-        setSyncError('Speichern fehlgeschlagen. Aenderungen bleiben lokal erhalten.');
-        return;
+      try {
+        const data = await sync.save(payload);
+        if (cloudSyncRef.current !== sync) return;
+        lastCloudPayloadRef.current = serializedPayload;
+        setLastSavedAt(data.updated_at);
+      } catch (error) {
+        if (cloudSyncRef.current !== sync) return;
+        setInitialSyncDone(false);
+        setSyncError(error.code === 'conflict'
+          ? 'Der Cloud-Plan wurde in einer anderen Sitzung geändert. Speichern ist pausiert, damit nichts überschrieben wird. Exportiere deinen lokalen Stand vor dem Neuladen.'
+          : 'Cloud-Speichern fehlgeschlagen. Speichern ist pausiert; dein lokaler Stand bleibt erhalten. Exportiere ihn vor dem Neuladen.');
+      } finally {
+        if (cloudSyncRef.current === sync) setIsSyncing(false);
       }
-      lastCloudPayloadRef.current = serializedPayload;
-      setLastSavedAt(data.updated_at);
     }, 1500);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [plannerTitle, semesters, requirements, modules, session, initialSyncDone]);
+    return () => clearTimeout(timeoutId);
+  }, [plannerTitle, semesters, requirements, modules, theme, cloudOwner, initialSyncDone, readyCloudSync]);
 
   const startDraggingRequirement = (event, requirementId) => {
     event.dataTransfer.effectAllowed = 'move';
@@ -858,6 +897,9 @@ export default function StudyPlaner() {
       return;
     }
 
+    previousRequirementPositionsRef.current = new Map(
+      Array.from(document.querySelectorAll('.analytics-card[data-requirement-id]'), element => [element.dataset.requirementId, element.getBoundingClientRect()]),
+    );
     setRequirements((currentRequirements) => moveRequirementToPosition(currentRequirements, draggedRequirementId, index));
     setDraggedRequirementId(null);
     setRequirementDropTarget(null);
@@ -877,6 +919,7 @@ export default function StudyPlaner() {
           </InlineEditable>
         </div>
         <div className="header-actions">
+          <button type="button" className="secondary-btn" aria-expanded={isAppearanceOpen} aria-controls="appearance-panel" onClick={() => setIsAppearanceOpen(!isAppearanceOpen)}>◐ Appearance</button>
           <input
             ref={fileInputRef}
             type="file"
@@ -889,7 +932,14 @@ export default function StudyPlaner() {
         </div>
       </header>
 
-      <section className={`cloud-panel ${session ? 'is-connected' : ''}`}>
+      {isAppearanceOpen && <section className="appearance-panel" id="appearance-panel" aria-label="Planner appearance">
+        <div><h2>Make it yours</h2><p>Choose a palette. Custom requirement colors stay as you set them.</p></div>
+        <div className="palette-options">{PALETTES.map(palette => <button key={palette.id} type="button" className={`palette-option ${theme === palette.id ? 'selected' : ''}`} aria-pressed={theme === palette.id} onClick={() => setTheme(palette.id)}>
+          <span className="palette-preview" style={{background: palette.background}}>{palette.colors.slice(0, 4).map(color => <i key={color} style={{background: color}} />)}</span>
+          <span>{palette.name}</span>{theme === palette.id && <CheckCircle2 size={15} />}
+        </button>)}</div>
+      </section>}
+      {(!supabase || IS_DEMO) ? <div className="local-banner"><span className="local-dot" />{IS_DEMO ? 'Local preview · Sample data · Changes stay in this browser' : 'Local planner · Automatically saved in this browser'}</div> : <section className={`cloud-panel ${session ? 'is-connected' : ''}`}>
         {!isAuthReady ? (
           <div key="auth-loading" className="cloud-panel-content">
             <div className="cloud-panel-heading">
@@ -916,7 +966,7 @@ export default function StudyPlaner() {
                   <span className="save-status-dot" aria-hidden="true" />
                   {syncError
                     ? syncError
-                    : lastSavedAt
+                    : isSyncing ? 'Wird gespeichert …' : lastSavedAt
                       ? `Zuletzt gespeichert: ${new Date(lastSavedAt).toLocaleString('de-DE', {
                           dateStyle: 'medium',
                           timeStyle: 'short',
@@ -924,6 +974,9 @@ export default function StudyPlaner() {
                       : 'Cloud-Speicherung wird eingerichtet'}
                 </span>
               </div>
+              {syncError && <button type="button" className="cloud-logout-btn" onClick={() => {
+                if (window.confirm('Cloud-Plan neu laden? Der lokale Stand wird ersetzt. Bitte zuvor mit Export JSON sichern.')) setCloudReload(value => value + 1);
+              }}>Cloud neu laden</button>}
               <button type="button" className="cloud-logout-btn" onClick={handleLogout}>
                 <LogOut size={17} />
                 Abmelden
@@ -951,7 +1004,7 @@ export default function StudyPlaner() {
             )}
           </div>
         )}
-      </section>
+      </section>}
 
       <div className="overall-progress-section">
         <div className="op-header">
@@ -967,11 +1020,13 @@ export default function StudyPlaner() {
           <div className="progress-fill in-progress" style={{ width: `${totalInProgressPercentage}%` }} />
           <div className="progress-fill planned" style={{ width: `${totalPlannedPercentage}%` }} />
         </div>
-        <div className="op-legend">
-          <span><span className="dot earned" /> Completed ({totalEarnedCredits} ECTS)</span>
-          <span><span className="dot in-progress" /> In Progress ({totalInProgressCredits} ECTS)</span>
-          <span><span className="dot planned" /> Planned ({totalPlannedCredits} ECTS)</span>
+        <div className="credit-summary" aria-label="ECTS by status" aria-live="polite">
+          <div className="credit-stat planned"><span>Planned</span><strong>{totalPlannedCredits}<small>ECTS</small></strong></div>
+          <div className="credit-stat in-progress"><span>In Progress</span><strong>{totalInProgressCredits}<small>ECTS</small></strong></div>
+          <div className="credit-stat completed"><span>Completed</span><strong>{totalEarnedCredits}<small>ECTS</small></strong></div>
+          <div className="credit-stat total"><span>Total allocated</span><strong>{totalPlannedCredits + totalInProgressCredits + totalEarnedCredits}<small>/ {totalRequiredCredits} ECTS</small></strong></div>
         </div>
+        <p className="credit-summary-hint">Only included requirements count toward these totals.</p>
       </div>
 
       {isFormOpen && (
@@ -999,6 +1054,7 @@ export default function StudyPlaner() {
                 onUpdateModule={updateModule}
                 onUpdateCredits={updateCredits}
                 containers={containerTitles}
+                requirementColors={Object.fromEntries(requirements.map((req, i) => [req.title, requirementColor(req, i, theme)]))}
                 draggedModuleId={draggedModuleId}
                 dropTarget={dropTarget}
                 onDragModuleStart={startDraggingModule}
@@ -1022,6 +1078,8 @@ export default function StudyPlaner() {
             <ContainerAnalytics
               key={requirement.id}
               requirement={requirement}
+              color={requirementColor(requirement, index, theme)}
+              onColorChange={(color) => setRequirements(current => current.map(req => req.id === requirement.id ? { ...req, color: normalizeColor(color) } : req))}
               modules={modulesByContainer[requirement.title] || []}
               index={index}
               isDragging={draggedRequirementId === requirement.id}
@@ -1123,6 +1181,7 @@ function SemesterColumn({
   title,
   modules,
   containers,
+  requirementColors,
   draggedModuleId,
   dropTarget,
   onMoveContainer,
@@ -1239,7 +1298,7 @@ function SemesterColumn({
                 </button>
               </div>
               <div className="module-meta">
-                <span className="tag-container">{module.container}</span>
+                <span className="tag-container" style={{ background: requirementColors[module.container], color: contrastInk(requirementColors[module.container]) }}>{module.container}</span>
                 <InlineEditable
                   className="tag-credits inline-chip-edit"
                   value={String(module.credits)}
@@ -1275,6 +1334,7 @@ function SemesterColumn({
                   <Trash2 size={16} />
                 </button>
               </div>
+              <ModuleNotes module={module} onUpdate={updates => onUpdateModule(module.id, updates)} />
             </div>
           </React.Fragment>
         ))}
@@ -1297,6 +1357,33 @@ function SemesterColumn({
       </div>
     </div>
   );
+}
+
+function ModuleNotes({ module, onUpdate }) {
+  const notes = normalizeNotes(module.notes);
+  const update = (id, patch) => onUpdate({ notes: notes.map(note => note.id === id ? { ...note, ...patch } : note) });
+  const addNote = () => onUpdate({ notes: [...notes, {
+    id: crypto.randomUUID(), title: `Note ${notes.length + 1}`, text: '', color: '#a5b4fc', size: 'medium', expanded: true,
+  }] });
+  return <section className="module-notes" aria-label={`Notes for ${module.name}`} onDragStart={e => e.stopPropagation()}>
+    <div className="notes-list-heading"><span>Notes <small>{notes.length}</small></span><button type="button" className="add-note-btn" onClick={addNote} aria-label={`Add note to ${module.name}`}>+ Add note</button></div>
+    {notes.map((note, index) => <div key={note.id} className="note-item" style={{ '--note-color': note.color }}>
+      <button type="button" className="notes-toggle" aria-expanded={note.expanded} aria-controls={`notes-${module.id}-${note.id}`} onClick={() => update(note.id, {expanded: !note.expanded})}>
+        <span aria-hidden="true">{note.expanded ? '▾' : '▸'}</span><span>{note.title || `Note ${index + 1}`}</span>
+      </button>
+      {note.expanded && <div id={`notes-${module.id}-${note.id}`} className="notes-body">
+        <div className="notes-tools">
+          <input className="notes-title" aria-label={`Note ${index + 1} title for ${module.name}`} value={note.title} placeholder="Note title" maxLength={80} onChange={e => update(note.id, {title: e.target.value})} />
+          <input type="color" aria-label={`Note ${index + 1} color for ${module.name}`} value={note.color} onChange={e => update(note.id, {color: e.target.value})} />
+          <select aria-label={`Note ${index + 1} text size for ${module.name}`} value={note.size} onChange={e => update(note.id, {size: e.target.value})}><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select>
+        </div>
+        <textarea aria-label={`Note ${index + 1} text for ${module.name}`} value={note.text} onChange={e => update(note.id, {text: e.target.value})} placeholder="Deadlines, links, ideas…" rows={4} className={`note-size-${note.size}`} />
+        <button type="button" className="remove-note-btn" aria-label={`Delete note ${index + 1} from ${module.name}`} onClick={() => {
+          if (!note.text.trim() || window.confirm('Delete this note? You can undo with Ctrl+Z.')) onUpdate({notes: notes.filter(item => item.id !== note.id)});
+        }}><Trash2 size={12} /> Delete note</button>
+      </div>}
+    </div>)}
+  </section>;
 }
 
 function InlineEditable({ value, onSave, children, className = '', inputMode = 'text', placeholder = '' }) {
@@ -1365,6 +1452,8 @@ function AddSemesterCard({ nextSemesterLabel, onAddSemester }) {
 
 function ContainerAnalytics({
   requirement,
+  color,
+  onColorChange,
   modules,
   index,
   isDragging,
@@ -1411,6 +1500,7 @@ function ContainerAnalytics({
         }}
       />
       <div
+        style={{ borderTop: `3px solid ${color}` }}
         data-requirement-id={requirement.id}
         className={`analytics-card ${overflowCredits > 0 ? 'is-overfull' : ''} ${isDragging ? 'is-dragging' : ''} ${!isIncluded ? 'is-excluded' : ''}`}
         draggable
@@ -1427,6 +1517,10 @@ function ContainerAnalytics({
           onDropAt(getInsertionIndexFromPointer(e));
         }}
       >
+        <div className="requirement-color-row" onDragStart={e => e.stopPropagation()}>
+          <label className="color-control"><input type="color" value={color} onChange={e => onColorChange(e.target.value)} aria-label={`Color for ${title}`} /><span>Tag color</span></label>
+          {requirement.color && <button type="button" className="text-button" onClick={() => onColorChange(null)}>Use palette</button>}
+        </div>
         <div className="ac-header">
           <InlineEditable className="requirement-title-edit" value={title} onSave={onRename}>
             <h3>{title}</h3>
