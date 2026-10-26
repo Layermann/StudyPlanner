@@ -79,3 +79,7 @@ and tested in the separate StudyPlanner Test project. The guard and RLS/revision
 tests passed there. Review and install the guard separately in production before
 rollout; the app/deployment workflow does not install it. Real Google sign-in and
 end-to-end cross-device tests remain pending. See `supabase/TEST-PROJECT.md`.
+
+Production publication was subsequently authorized on 2026-10-26. The tested
+version guard is now installed in the application database. See
+`PRODUCTION-RELEASE.md` for preparation, remaining live checks and rollback notes.

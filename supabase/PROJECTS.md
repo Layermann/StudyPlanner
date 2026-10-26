@@ -32,7 +32,8 @@ permissions were left unchanged. Project IDs and API URLs are unchanged by renam
 
 For any future production SQL deployment, verify **`ucsyivchvsztahpcrkzk`** as the
 intended target. Never select the archived project based on its former name or
-GitHub association. Production schema changes require separate authorization;
-the multi-degree guard was installed only in the test project so far.
+GitHub association. The user separately authorized production publication on 2026-10-26. The
+multi-degree guard is now installed in the application project too; see
+`../PRODUCTION-RELEASE.md`.
 
 See `TEST-PROJECT.md` for test configuration and completed database checks.
