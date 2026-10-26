@@ -1,4 +1,4 @@
-# StudyPlaner
+# StudyPlanner
 
 React/Vite study planner with semester planning, ECTS totals, independent module
 notes, JSON import/export and optional Supabase cloud storage.

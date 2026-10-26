@@ -1,4 +1,4 @@
-# Working on StudyPlaner
+# Working on StudyPlanner
 
 - Install with `npm ci`; start with `npm run dev`.
 - Run `npm test` and `npm run build` for changes to planner behavior.
